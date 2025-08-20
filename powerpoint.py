@@ -10,36 +10,40 @@ ITEM_TYPE_MAP = {
     "waiting": 2,
     "not_fixed": 3
 }
+USED_MPO_HASHES = set()
 
 def extract_mpo_images_from_pptx(pptx_path, group_id, name, item_type, image_dir, next_id):
     mpo_image_paths = []
-    seen_hashes = set()
     item_type_number = ITEM_TYPE_MAP.get(item_type, 0)
 
-    with ZipFile(pptx_path, 'r') as zipf:
-        index = 1
+    with ZipFile(pptx_path, "r") as zipf:
         for zipinfo in zipf.infolist():
-            if zipinfo.filename.startswith("ppt/media/"):
-                image_data = zipf.read(zipinfo)
-                img_hash = hash(image_data)
-                if img_hash in seen_hashes:
-                    continue
-                seen_hashes.add(img_hash)
-                if b"MPF" in image_data[:64]:
-                    try:
-                        img = Image.open(io.BytesIO(image_data))
-                        img.seek(0)
+            if not zipinfo.filename.startswith("ppt/media/"):
+                continue
 
-                        output_filename = f"group{group_id}_{next_id}_{name}_{item_type_number}.jpg"
-                        output_path = os.path.join(image_dir, output_filename)
-                        img.convert("RGB").save(output_path, "JPEG")
-                        print(f"Extracted MPO as JPEG: {output_path}")
+            image_data = zipf.read(zipinfo)
+            image_hash = hash(image_data)
 
-                        mpo_image_paths.append(output_path)
-                        break  # Stop after first successful extraction
-                    except Exception as e:
-                        print(f"Failed to process MPO ({zipinfo.filename}): {e}")
-            index += 1
+            # Skip if already used
+            if image_hash in USED_MPO_HASHES:
+                continue
+
+            # Check for MPF
+            if b"MPF" in image_data[:64]:
+                try:
+                    img = Image.open(io.BytesIO(image_data))
+                    img.seek(0)
+                    output_filename = f"group{group_id}_{next_id}_{name}_{item_type_number}.jpg"
+                    output_path = os.path.join(image_dir, output_filename)
+                    img.convert("RGB").save(output_path, "JPEG")
+                    print(f"Extracted MPO as JPEG: {output_path}")
+
+                    mpo_image_paths.append(output_path)
+                    USED_MPO_HASHES.add(image_hash)
+                    break  # only use the first unused MPO found
+
+                except Exception as e:
+                    print(f"Failed to process MPO ({zipinfo.filename}): {e}")
 
     return mpo_image_paths
 
